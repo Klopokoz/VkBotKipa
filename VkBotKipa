@@ -23,7 +23,7 @@ try:
 except vk_api.AuthError as error_msg:
     print(error_msg)
 
-access_token = '3b6f28040091c08fd61bdc5f13992106c254f6f86ab352f31c51c0c7e36867e0bf048327a736b2200e4d2'
+access_token = '***********************'
 vk_session = vk_api.VkApi(token=access_token)
 vk = vk_session.get_api()
 upload = VkUpload(vk_session)  # Для загрузки изображений
