@@ -15,8 +15,8 @@ def write_msg(user_id, message):
 session = requests.Session()
 
 # Авторизация пользователя:
-login = '89164938909'
-password = 'KlopKozyDoil5Raz'
+login = '*******'
+password = '**********'
 vk_session = vk_api.VkApi(login, password)
 try:
     vk_session.auth(token_only=True)
