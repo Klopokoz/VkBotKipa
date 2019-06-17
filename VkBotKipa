@@ -1,0 +1,126 @@
+import vk_api
+from vk_api import VkUpload
+from vk_api.longpoll import VkLongPoll, VkEventType
+import requests
+import wikipedia
+import random
+
+
+def write_msg(user_id, message):
+    vk.messages.send(
+        user_id=event.user_id,
+        random_id=0,
+        message=message)
+
+session = requests.Session()
+
+# Авторизация пользователя:
+login = '89164938909'
+password = 'KlopKozyDoil5Raz'
+vk_session = vk_api.VkApi(login, password)
+try:
+    vk_session.auth(token_only=True)
+except vk_api.AuthError as error_msg:
+    print(error_msg)
+
+access_token = '3b6f28040091c08fd61bdc5f13992106c254f6f86ab352f31c51c0c7e36867e0bf048327a736b2200e4d2'
+vk_session = vk_api.VkApi(token=access_token)
+vk = vk_session.get_api()
+upload = VkUpload(vk_session)  # Для загрузки изображений
+longpoll = VkLongPoll(vk_session)
+
+
+for event in longpoll.listen():
+    if event.type == VkEventType.MESSAGE_NEW:
+        if event.to_me:
+            requests1 = event.text
+            requests1 = requests1.lower()
+            if requests1 == 'привет':
+                write_msg(event.user_id, 'Привет, я бот Саши. Вот, что я могу:\n'
+                                         '1.Узнать ваш id \n'
+                                         '2.Как у меня дела\n'
+                                         '3.Наибольшее количество лайков у вас на странице\n'
+                                         '4.Википедия(Введите номер 4, а затем, в следующем сообщении, слово,которое вас интересует)\n'
+                                         '5.Фото котика\n'
+                                         '6.Завершить диалог с ботом (можно написать "Пока")\n'
+                                         'Напиши номер команды или фразу/слово!!! ')
+                for event in longpoll.listen():
+                    if event.type == VkEventType.MESSAGE_NEW:
+                        if event.to_me:
+                            requests1 = event.text
+                            requests1 = requests1.lower()
+                            if requests1 == '1':
+                                write_msg(event.user_id, event.user_id)
+                            elif requests1 == '2':
+                                write_msg(event.user_id, 'Хорошо,вот бота пишу')
+                            elif requests1 == '3':
+                                try:
+                                    token = 'c0af87f4c0af87f4c0af87f462c0c4ae84cc0afc0af87f49da91136472b3a53c13132f5'
+                                    version = 5.92
+                                    domain = str(event.user_id)
+                                    offset = 0
+                                    count = 100
+                                    all_posts = []
+                                    while offset < 1000:
+                                        response = requests.get('https://api.vk.com/method/wall.get',
+                                                                params={
+                                                                    'access_token': token,
+                                                                    'v': version,
+                                                                    'owner_id': domain,
+                                                                    'count': count,
+                                                                    'offset': offset
+                                                                }
+                                                                )
+                                        data = response.json()['response']['items']
+                                        offset += 100
+                                        all_posts.extend(data)
+                                    mxlike = 0
+                                    n = -1
+                                    for i in all_posts:
+                                        n += 1
+                                        k = all_posts[n]['likes']['count']
+                                        if k > mxlike:
+                                            mxlike = k
+                                    write_msg(event.user_id, 'Наиболшее количество лайков:')
+                                    write_msg(event.user_id, mxlike)
+                                except:
+                                    write_msg(event.user_id, 'Нет постов или чертова 15-ая ошибка ')
+
+                            elif requests1 == '4':  #
+                                for event in longpoll.listen():
+                                    if event.type == VkEventType.MESSAGE_NEW:
+                                        if event.to_me:
+                                            wikipedia.set_lang("RU")
+                                            mes = str(wikipedia.summary(event.text))
+                                            write_msg(event.user_id, 'Вот , что я нашел:\n' + mes + '\n\nСпасибо , что использовали бота.Пока!')
+                                            break
+                                            #write_msg(event.user_id,'Для вызова бота напишите опять:"Привет"')
+                            elif requests1 == '5':
+                                attachments = []
+                                urllist=['https://w-dog.ru/wallpapers/5/18/547026580393225.jpg',
+                                         'https://million-wallpapers.ru/wallpapers/2/43/15169614930530162664.jpg',
+                                         'https://img2.goodfon.ru/original/2700x1800/0/c3/britanskiy-kot-pisatel.jpg',
+                                         'https://w-dog.ru/wallpapers/6/3/330632810875751.jpg',
+                                         'https://f3.upet.com/z_2jC7cJka36fhH3l.jpg',
+                                         'https://avatars.mds.yandex.net/get-zen_doc/1328583/pub_5ac4d5dd9b403c0429e862c2_5ac4df7d9e29a22b64e17564/scale_1200',
+                                         'https://w-dog.ru/wallpapers/1/40/315048721160089.jpg',
+                                         'https://fanparty.ru/fanclubs/cats/gallery/1934353_cats.jpg',
+                                         'https://avatars.mds.yandex.net/get-pdb/1325254/3ef31cbb-81b1-4b2b-9f97-992257225587/s1200?webp=false',
+                                         'https://66.media.tumblr.com/c689a85545b3badf16864c65e2d57bfb/tumblr_nyshzpYIxg1sn75h6o1_1280.jpg',
+                                         'https://funik.ru/wp-content/uploads/2018/12/57ca9b5a1b3be3e53c49.jpg',
+                                         'https://avatars.mds.yandex.net/get-pdb/202366/98ffeacb-3f2d-4e45-84c4-6eee6702e92d/s1200?webp=false']
+                                r=random.randint(0,11)
+                                upload = VkUpload(vk_session)
+                                image_url = str(urllist[r])
+                                image = session.get(image_url, stream=True)
+                                photo = upload.photo_messages(photos=image.raw)[0]
+                                attachments.append(
+                                    'photo{}_{}'.format(photo['owner_id'], photo['id']))
+                                vk.messages.send(
+                                    user_id=event.user_id,
+                                    random_id=0,
+                                    attachment=','.join(attachments),
+                                    message='А вот ваш котик:')
+                            elif requests1 == '6':  #
+                                write_msg(event.user_id, 'Пока')
+                                break
