@@ -1,126 +1,1566 @@
+''' Бот для Вконтакте , направленный на получение медиа информации , а также полезных данных. '''
+
 import vk_api
 from vk_api import VkUpload
 from vk_api.longpoll import VkLongPoll, VkEventType
 import requests
 import wikipedia
 import random
+from bs4 import BeautifulSoup
+import emoji
+import time
+from threading import Thread
+from collections import Counter
+import pymorphy2
+
+
+class Сomparison(Thread):
+    def __init__(self, zn, all_posts, mxlike, mxviews, mxreposts, platformiphone):
+        Thread.__init__(self)
+        self.zn = zn
+        self.like = mxlike
+        self.views = mxviews
+        self.reposts = mxreposts
+        self.platformiphone = platformiphone
+        self.all_posts = all_posts
+
+    def run(self):
+        n = -1
+        for post in self.all_posts:
+            k = 0
+            n += 1
+            if self.zn == 'likes':
+                k = self.all_posts[n]['likes']['count']
+                if k > self.like:
+                    self.like = k
+            elif self.zn == 'views':
+                try:
+                    k = self.all_posts[n]['views']['count']
+                    if k > self.views:
+                        self.views = k
+                except:
+                    None
+            elif self.zn == 'reposts':
+                k = self.all_posts[n]['reposts']['count']
+                if k > self.reposts:
+                    self.reposts = k
+            elif self.zn == 'platform':
+                try:
+                    k = self.all_posts[n]['post_source']['platform']
+                    if k == 'iphone':
+                        self.platformiphone += 1
+                        break
+                except:
+                    None
+
+    def get_results(self):
+        if self.zn == 'likes':
+            return self.like
+        elif self.zn == 'views':
+            return self.views
+        elif self.zn == 'reposts':
+            return self.reposts
+        elif self.zn == 'platform':
+            return self.platformiphone
+
+
+class Login():
+    def __init__(self, login, password, token, access_token):
+        self.login = login
+        self.password = password
+        self.token = token
+        self.access_token = access_token
+
+    def basic(self):
+        vk_session = vk_api.VkApi(self.login, self.password)
+        vk_session.auth(token_only=True)
+        vk_session = vk_api.VkApi(token=self.access_token)
+        vk = vk_session.get_api()
+        upload = VkUpload(vk_session)
+        longpoll = VkLongPoll(vk_session)
+        token = self.token
+        return longpoll, vk, upload, token, vk_session
+
+
+class Main(Сomparison):
+    def __init__(self, longpoll, vk, upload, token, vk_session, id_list):
+        self.longpoll = longpoll
+        self.vk = vk
+        self.upload = upload
+        self.token = token
+        self.vk_session = vk_session
+        self.id_list = id_list
+
+    def basic(self):
+        session = requests.Session()
+        ragnarek = False
+        for event in longpoll.listen():
+            if event.type == VkEventType.MESSAGE_NEW:
+                proverka = event.user_id
+                if event.to_me:
+                    requests1 = event.text
+                    requests1 = requests1.lower()
+                    if requests1 == 'привет':
+                        version = 5.92
+                        domain = event.user_id
+                        response = requests.get('https://api.vk.com/method/users.get',
+                                                params={
+                                                    'user_id': domain,
+                                                    'access_token': token,
+                                                    'v': version,
+                                                    'fields': (
+                                                        'first_name', 'last_name', 'deactivated', 'is_closed',
+                                                        'can_access_closed',
+                                                        'id')
+                                                }
+                                                )
+                        data = response.json()['response']
+                        name = data[0]['first_name']
+                        write_msg(event.user_id, emoji.emojize('______:bangbang:  ATTENTION :bangbang:______\n'
+                                                               'Внимательно читайте сообщение!\n\n'
+                                                               'Привет {}, я бот Саши.\n Вот, что я могу:\n'
+                                                               '1.Узнать ваш id.\n'
+                                                               '2.Максимальное количество лайков у вас на странице.\n'
+                                                               '3.Узнать наибольшее количество лайков,'
+                                                               'просмотров и репостов среди ваших друзей\n'
+                                                               '(Только если у вас открытый профиль).\n'
+                                                               '4.Найти информацию в википедии'
+                                                               '(Введите номер 4, а затем в следующем сообщении слово,'
+                                                               'которое вас интересует).\n'
+                                                               '5.Скинуть фото котика.\n'
+                                                               '6.Скинуть мемную песню.\n'
+                                                               '7.Рекомендации фильмов по жанру.\n'
+                                                               '8.Узнать о новинках кино.\n'
+                                                               '9.Узнать курс доллара и евро.\n'
+                                                               '10.Узнать погоду в Москве.\n'
+                                                               '11.Хех-анализатор(анализатор сообщений).\n'
+                                                               'Для удаления сообщений от бота напишите:"Очистить".\n'
+                                                               'Для завершения диалога с ботом напишите:"Пока".\n'
+                                                               'Напиши номер команды или слово!!!\n\n'
+                                                               'Шифр, позволяющий узнать команду пасхалки:'
+                                                               '21234 -1(14) +29(10)\n'
+                                                               'Человек , угадающий команду, получит приз\n'
+                                                               .format(name),
+                                                               use_aliases=True))
+
+                        for event in longpoll.listen():
+                            if event.type == VkEventType.MESSAGE_NEW:
+                                if event.user_id == proverka:
+                                    if event.to_me:
+                                        requests1 = event.text
+                                        requests1 = requests1.lower()
+                                        audiorandom = [1000000]
+                                        numrandom = [100000]
+                                        if requests1 == '1':
+                                            id_list = write_msg(event.user_id, event.user_id)
+                                        elif requests1 == '2':
+                                            try:
+                                                version = 5.92
+                                                domain = event.user_id
+                                                offset = 0
+                                                count = 100
+                                                all_posts = []
+                                                while offset < 1000:
+                                                    response = requests.get('https://api.vk.com/method/wall.get',
+                                                                            params={
+                                                                                'access_token': token,
+                                                                                'v': version,
+                                                                                'owner_id': domain,
+                                                                                'count': count,
+                                                                                'offset': offset
+                                                                            }
+                                                                            )
+                                                    data = response.json()['response']['items']
+                                                    offset += 100
+                                                    all_posts.extend(data)
+                                                mxlike = 0
+                                                n = -1
+                                                for i in all_posts:
+                                                    n += 1
+                                                    k = all_posts[n]['likes']['count']
+                                                    if k > mxlike:
+                                                        mxlike = k
+                                                id_list = write_msg(event.user_id, 'Наиболшее количество лайков:')
+                                                id_list = write_msg(event.user_id, mxlike)
+                                            except:
+                                                id_list = write_msg(event.user_id, 'Нет постов или чертова 15-ая ошибка ')
+                                        elif requests1 == '3':
+                                            id_list = write_msg(event.user_id,
+                                                                  'Анализ уже идет, это может занять некоторое время.\n'
+                                                                  'У меня не дата-центр!')
+                                            closed = 0
+                                            mxlike = 0
+                                            mxviews = 0
+                                            mxreposts = 0
+                                            platformiphone = 0
+                                            version = 5.92
+                                            domain = event.user_id
+                                            count = 5000
+                                            order = 'name'
+                                            response1 = requests.get('https://api.vk.com/method/friends.get',
+                                                                     params={
+                                                                         'access_token': token,
+                                                                         'v': version,
+                                                                         'user_id': domain,
+                                                                         'count': count,
+                                                                         'order': order
+                                                                     })
+                                            data1 = response1.json()['response']['items']
+                                            for id in data1:
+                                                try:
+                                                    version = 5.92
+                                                    domain = id
+                                                    offset = 0
+                                                    count = 100
+                                                    all_posts = []
+                                                    while offset < 1000:
+                                                        response = requests.get('https://api.vk.com/method/wall.get',
+                                                                                params={
+                                                                                    'access_token': token,
+                                                                                    'v': version,
+                                                                                    'owner_id': domain,
+                                                                                    'count': count,
+                                                                                    'offset': offset})
+                                                        data = response.json()['response']['items']
+                                                        offset += 100
+                                                        all_posts.extend(data)
+                                                except:
+                                                    closed += 1
+                                                if __name__ == "__main__":
+                                                    my_thread = Сomparison('likes', all_posts, mxlike, mxviews,
+                                                                           mxreposts, platformiphone)
+                                                    my_thread1 = Сomparison('reposts', all_posts, mxlike, mxviews,
+                                                                            mxreposts, platformiphone)
+                                                    my_thread2 = Сomparison('views', all_posts, mxlike, mxviews,
+                                                                            mxreposts, platformiphone)
+                                                    my_thread3 = Сomparison('platform', all_posts, mxlike, mxviews,
+                                                                            mxreposts, platformiphone)
+
+                                                    my_thread.start()
+                                                    my_thread1.start()
+                                                    my_thread2.start()
+                                                    my_thread3.start()
+
+                                                    mxviews = my_thread2.get_results()
+                                                    mxreposts = my_thread1.get_results()
+                                                    mxlike = my_thread.get_results()
+                                                    platformiphone = my_thread3.get_results()
+                                            id_list = write_msg(event.user_id,
+                                                                    'Максимально количество лайков:{}\n'
+                                                                    'Максимально количество просмотров:{}\n'
+                                                                    'Максимально количество репостов:{}\n'
+                                                                    'Закрытых профилей:{}\n'
+                                                                    'Друзей с Iphone:{}\n'.format(mxlike, mxviews,
+                                                                                                  mxreposts,
+                                                                                                  closed,
+                                                                                                  platformiphone))
+                                        elif requests1 == '4':
+                                            for event in longpoll.listen():
+                                                if event.type == VkEventType.MESSAGE_NEW:
+                                                    if event.to_me:
+                                                        try:
+                                                            wikipedia.set_lang("RU")
+                                                            mes = str(wikipedia.summary(event.text))
+                                                            id_list = write_msg(event.user_id,
+                                                                      'Вот , что я нашел:\n' + mes[0:10000])
+                                                        except:
+                                                            id_list = write_msg(event.user_id,
+                                                                      'Запрос на англ. яз или нет такого слова')
+                                                        break
+                                        elif requests1 == '5':
+                                            try:
+                                                attachments = []
+                                                urllist = ['https://mtdata.ru/u19/photoD94F/20591326141-0/original.jpeg',
+                                                           'https://s1.1zoom.me/big7/501/Cats_Glance_480888.jpg',
+                                                           'http://crosti.ru/patterns/00/11/38/ba8fee7cfe/picture.jpg',
+                                                           'https://avatars.mds.yandex.net/get-pdb/1884734/b34307fc-40bf-42be-82a4-033e8f6d91b1/s1200?webp=false',
+                                                           'https://www.nastol.com.ua/pic/201602/1600x900/nastol.com.ua-164523.jpg',
+                                                           'https://f1.upet.com/4_9GJoeoE97G_7.jpg',
+                                                           'https://wnature.net/pictures/2014/02/177/kotik-porody-britanets-lezhit-i-zadumchivo-smotrit.jpg',
+                                                           'https://avatars.mds.yandex.net/get-pdb/1695402/60638403-2a34-4523-912e-735af617307d/s1200?webp=false',
+                                                           'https://yandex.ru/images/_crpd/1w3aHZ099/a612aec_c5/Px1JbPYM6r7n5vnh_Df_fpg9jOh4E49kjsFi0l61AgGR07qIHZ6jzoWxyoCcaWxAJuX0eCbV6zfRTuilDn-udXZdEG66DPq8q7e_q-projqZN9y0LEbIPYXGZsBfsRpfhA',
+                                                           'https://fanparty.ru/fanclubs/cats/gallery/1934257_cats.jpg',
+                                                           'https://images.wallpaperscraft.ru/image/kot_morda_pushistyy_nedovolnyy_53108_1920x1080.jpg',
+                                                           'https://avatars.mds.yandex.net/get-pdb/1648714/a4a43620-fa34-4dd4-a16e-87a2a1bcb334/s1200?webp=false']
+                                                r = random.randint(0, 11)
+                                                if r not in numrandom:
+                                                    numrandom.append(r)
+                                                    upload = VkUpload(vk_session)
+                                                    image_url = str(urllist[r])
+                                                    image = session.get(image_url, stream=True)
+                                                    photo = upload.photo_messages(photos=image.raw)[0]
+                                                    attachments.append(
+                                                        'photo{}_{}'.format(photo['owner_id'], photo['id']))
+                                                    id1 = vk.messages.send(
+                                                        user_id=event.user_id,
+                                                        random_id=0,
+                                                        attachment=','.join(attachments),
+                                                        message='А вот ваш котик:')
+                                                    id_list.append(id1)
+                                            except:
+                                                id_list = write_msg(event.user_id, 'Хватит спамить!')
+                                        elif requests1 == '6':
+                                            attachments = ['audio222754285_456239234',
+                                                           'audio222754285_456239232',
+                                                           'audio222754285_456239221',
+                                                           'audio222754285_456239230',
+                                                           'audio222754285_456239229',
+                                                           'audio222754285_456239231',
+                                                           'audio222754285_456239215',
+                                                           'audio222754285_456239216',
+                                                           'audio222754285_456239233',
+                                                           'audio222754285_456239235',
+                                                           'audio222754285_456239236',
+                                                           'audio222754285_456239237',
+                                                           'audio222754285_456239238',
+                                                           'audio222754285_456239239',
+                                                           'audio222754285_456239240']
+                                            r = random.randint(0, 14)
+                                            if r not in audiorandom:
+                                                audiorandom.append(r)
+                                                id2 = vk.messages.send(
+                                                    user_id=event.user_id,
+                                                    owner_id='222754285',
+                                                    album_id='11',
+                                                    attachment=attachments[r],
+                                                    random_id=0,
+                                                    message='А вот ваш мемный трек:')
+                                                id_list.append(id2)
+                                        elif requests1 == '7':
+                                            id_list = write_msg(event.user_id, 'Выберите жанр:\n'
+                                                                     '1.Драма\n'
+                                                                     '2.Фантастика\n'
+                                                                     '3.Боевик\n'
+                                                                     '4.Триллер\n'
+                                                                     '5.Неонуар\n'
+                                                                     'Для перемещения на шаг назад напишите слово "назад"')
+                                            for event in longpoll.listen():
+                                                if event.type == VkEventType.MESSAGE_NEW:
+                                                    if event.user_id == proverka:
+                                                        if event.to_me:
+                                                            requests1 = event.text
+                                                            requests1 = requests1.lower()
+                                                            if requests1 == '1':
+                                                                id_list = write_msg(event.user_id,
+                                                                          'Для подробной информации о фильме, напишите номер фильма в чат.\n'
+                                                                          '1. Побег из шоушенка (9.3 IMDb)\n'
+                                                                          '2. Крёстный отец (9.2 IMDb)\n'
+                                                                          '3. Список Шиндлера (8.9 IMDb)\n'
+                                                                          '4. Форрест гамп (8.8 IMDb)\n'
+                                                                          '5. Пролетая над гнездом кукушки (8.7 IMDb)\n'
+                                                                          '6. Зелёная миля (8.6 IMDb)\n'
+                                                                          '7. Охота (8.3 IMDb\n'
+                                                                          '8. Титаник (7.8 IMDb)\n'
+                                                                          '9. 25-й час (7.7 IMDb)\n'
+                                                                          '10. Судья (7.4 IMDb)\n'
+                                                                          'Для перемещения на шаг назад напишите слово "назад"')
+                                                                for event in longpoll.listen():
+                                                                    if event.type == VkEventType.MESSAGE_NEW:
+                                                                        if event.user_id == proverka:
+                                                                            if event.to_me:
+                                                                                requests1 = event.text
+                                                                                requests1 = requests1.lower()
+                                                                                if requests1 == '1':
+                                                                                    attachments = [
+                                                                                        'video-113071474_456242464_b3846553055fe74893']
+                                                                                    id3 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '1. Побег из Шоушенка\n'
+                                                                                                'The Shawshank Redemption (1994)\n'
+                                                                                                'Драма\n'
+                                                                                                'США, 2:22\n\n\n'
+                                                                                                'Бухгалтер Энди Дюфрейн обвинен в убийстве собственной жены и ее любовника.'
+                                                                                                ' Оказавшись в тюрьме под названием Шоушенк, он сталкивается с жестокостью и беззаконием, царящими по обе стороны решетки.'
+                                                                                                ' Каждый, кто попадает в эти стены, становится их рабом до конца жизни.'
+                                                                                                ' Но Энди, обладающий живым умом и доброй душой, находит подход как к заключенным, так и к охранникам, добиваясь их особого к себе расположения.')
+                                                                                    id_list.append(id3)
+                                                                                if requests1 == '2':
+                                                                                    attachments = [
+                                                                                        'video-108943641_456239842_30ebf962ec086587ec']
+                                                                                    id4 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '2. Крёстный отец\n'
+                                                                                                'The Godfather (1972)\n'
+                                                                                                'Драма, криминал\n'
+                                                                                                'США, 2:55\n\n\n'
+
+                                                                                                'Криминальная сага, повествующая о нью-йоркской сицилийской мафиозной семье Корлеоне. Фильм охватывает период 1945-1955 годов.'
+                                                                                                'Глава семьи, Дон Вито Корлеоне, выдаёт замуж свою дочь.'
+                                                                                                'В это время со Второй мировой войны возвращается его любимый сын Майкл.'
+                                                                                                'Майкл, герой войны, гордость семьи, не выражает желания заняться жестоким семейным бизнесом.'
+                                                                                                'Дон Корлеоне ведёт дела по старым правилам, но наступают иные времена, и появляются люди, желающие изменить сложившиеся порядки.'
+                                                                                                'На Дона Корлеоне совершается покушение.')
+                                                                                    id_list.append(id4)
+                                                                                if requests1 == '3':
+                                                                                    attachments = [
+                                                                                        'video-36621543_456242927_f2678aa47a37284096']
+                                                                                    id5 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '3. Список Шиндлера\n'
+                                                                                                'Schindler’s List (1993)\n'
+                                                                                                'Драма, биография, история\n'
+                                                                                                'США, 3:15\n\n\n'
+                                                                                                'Фильм рассказывает реальную историю загадочного Оскара Шиндлера, члена нацистской партии, преуспевающего фабриканта, спасшего во время Второй мировой войны почти ')
+                                                                                    id_list.append(id5)
+                                                                                if requests1 == '4':
+                                                                                    attachments = [
+                                                                                        'video161967959_456241375_779b521dac020cca22']
+                                                                                    id6 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '4. Форрест Гамп\n'
+                                                                                                'Forrest Gump (1994)\n'
+                                                                                                'Драма, мелодрама\n'
+                                                                                                'США, 2:22\n\n\n'
+                                                                                                'От лица главного героя Форреста Гампа, слабоумного безобидного человека с благородным и открытым сердцем, рассказывается история его необыкновенной жизни.'
+                                                                                                'Фантастическим образом превращается он в известного футболиста, героя войны, преуспевающего бизнесмена.'
+                                                                                                'Он становится миллиардером, но остается таким же бесхитростным, глупым и добрым.'
+                                                                                                'Форреста ждет постоянный успех во всем, а он любит девочку, с которой дружил в детстве, но взаимность приходит слишком поздно.')
+                                                                                    id_list.append(id6)
+                                                                                if requests1 == '5':
+                                                                                    attachments = [
+                                                                                        'video-34335548_456240041_5fb9873b9d70b0402b']
+                                                                                    id7 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '5. Пролетая над гнездом кукушки\n '
+                                                                                                "One Flew Over the Cuckoo's (1975)\n"
+                                                                                                'Драма\n'
+                                                                                                'США, 2:13\n\n\n'
+                                                                                                'Сымитировав помешательство в надежде избежать тюремного заключения, Рэндл Патрик МакМерфи попадает в психиатрическую клинику, где почти безраздельным хозяином является жестокосердная сестра Милдред Рэтчед.'
+                                                                                                'МакМерфи поражается тому, что прочие пациенты смирились с существующим положением вещей, а некоторые – даже сознательно пришли в лечебницу, прячась от пугающего внешнего мира.'
+                                                                                                'И решается на бунт. В одиночку.')
+                                                                                    id_list.append(id7)
+                                                                                if requests1 == '6':
+                                                                                    attachments = [
+                                                                                        'video-113071474_456242526_52280b4399d6fcfb20']
+                                                                                    id8 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '6. Зелёная миля \n'
+                                                                                                'The Green Mile (1999)\n'
+                                                                                                'Драма, фэнтези, криминал\n '
+                                                                                                'США, 3:09\n\n\n'
+                                                                                                'Пол Эджкомб - начальник блока смертников в тюрьме «Холодная гора», каждый из узников которого однажды проходит «зеленую милю» по пути к месту казни.'
+                                                                                                'Пол повидал много заключённых и надзирателей за время работы. Однако гигант Джон Коффи, обвинённый в страшном преступлении, стал одним из самых необычных обитателей блока.')
+                                                                                    id_list.append(id8)
+                                                                                if requests1 == '7':
+                                                                                    attachments = [
+                                                                                        'video1783635_456240824_fc0464c98401b4b6fd']
+                                                                                    id9 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '7. Охота\n '
+                                                                                                'Jagten (2012)\n'
+                                                                                                'Драма\n'
+                                                                                                'Дания, Швеция, 1:55 \n\n\n'
+                                                                                                'Учитель живет одинокой жизнью, все время борется за опеку над сыном.'
+                                                                                                'Его жизнь постепенно становится лучше, когда он находит любовь и получает хорошие новости от сына, но его новая жизнь вот-вот будет жестоко разрушена невинной ложью.')
+                                                                                    id_list.append(id9)
+                                                                                if requests1 == '9':
+                                                                                    attachments = [
+                                                                                        'video-130908472_456239452_c801a3810d1c578d0e']
+                                                                                    id10 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '9. 25-й час\n'
+                                                                                                '25th Hour (2002)\n'
+                                                                                                'США, 2:15\n\n\n'
+                                                                                                'В фильме описывается последний день свободной жизни молодого бруклинца Монти Брогана (Эдвард Нортон), осужденного на семь лет тюрьмы за торговлю наркотиками.'
+                                                                                                ' Оставшиеся 24 часа он проводит в компании своих родных, друзей, деловых партнеров и любимой девушки Натурель.'
+                                                                                                'Монти, мечтавший в свое время стать пожарным, но в итоге ступивший на роковую стезю наркодилера, прощается с прошлым и пытается переосмыслить свою жизнь...')
+                                                                                    id_list.append(id10)
+                                                                                if requests1 == '8':
+                                                                                    attachments = [
+                                                                                        'video187350425_456239583_c6f55d6fb16be71663']
+                                                                                    id11 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '8. Титаник\n '
+                                                                                                'Titanic (1997)\n'
+                                                                                                'Драма, мелодрама\n'
+                                                                                                'США, 3:14\n\n\n'
+                                                                                                'Молодые влюбленные Джек и Роза находят друг друга в первом и последнем плавании «непотопляемого» Титаника.'
+                                                                                                'Они не могли знать, что шикарный лайнер столкнется с айсбергом в холодных водах Северной Атлантики, и их страстная любовь превратится в схватку со смертью.')
+                                                                                    id_list.append(id11)
+                                                                                if requests1 == '10':
+                                                                                    attachments = [
+                                                                                        'video-93893993_171446849_c1e862ab8e62610c1d']
+                                                                                    id12 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '10. Судья \n'
+                                                                                                'The Judge (2014)\n'
+                                                                                                'Драма, криминал\n'
+                                                                                                'США, 2:22\n\n\n'
+                                                                                                'В центре истории — успешный адвокат, который приезжает в родной город на похороны матери и узнаёт, что его отца, городского судью, подозревают в убийстве.'
+                                                                                                'Герой решает задержаться, чтобы выяснить правду, и постепенно лучше узнаёт родственников, с которыми давно вообще никак не общался.')
+                                                                                    id_list.append(id12)
+                                                                                elif requests1 == 'назад':
+                                                                                    id_list = write_msg(event.user_id,
+                                                                                              'Вы перемещены на шаг назад.')
+                                                                                    break
+                                                                                elif requests1 == 'пока':
+                                                                                    ragnarek = True
+                                                                                    id_list = write_msg(event.user_id, 'Пока')
+                                                                                    break
+                                                            elif requests1 == '2':
+                                                                id_list = write_msg(event.user_id,
+                                                                          'Для подробной информации о фильме, напишите номер фильма в чат.\n'
+                                                                          '1. Тёмный рыцарь (9.0 IMDb)\n'
+                                                                          '2. Начало (8.8 IMDb)\n'
+                                                                          '3. Матрица (8.7 IMDb)\n'
+                                                                          '4. Интерстеллар (8.6 IMDb)\n'
+                                                                          '5. Назад в будущее (8.5 IMDb)\n'
+                                                                          '6. Престиж (8.5 IMDb)\n'
+                                                                          '7. Терминатор 2: Судный день (8.5 IMDb)\n'
+                                                                          '8. Темный рыцарь: Возрождение легенды (8.4 IMDb)\n'
+                                                                          '9. Шоу Трумана (8.1 IMDb)\n'
+                                                                          '10.Эффект бабочки (7.7 IMDb)\n'
+                                                                          'Для перемещения на шаг назад напишите слово "назад"')
+                                                                for event in longpoll.listen():
+                                                                    if event.type == VkEventType.MESSAGE_NEW:
+                                                                        if event.user_id == proverka:
+                                                                            if event.to_me:
+                                                                                requests1 = event.text
+                                                                                requests1 = requests1.lower()
+                                                                                if requests1 == '1':
+                                                                                    attachments = [
+                                                                                        'video-18130160_144982257_a286deb44ac4b61c9a']
+                                                                                    id13 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '1. Темный рыцарь\n'
+                                                                                                'The Dark Knight (2008)\n'
+                                                                                                'Фантастика, боевик триллер\n'
+                                                                                                'США, Великобритания, 2:32\n\n\n'
+                                                                                                'Бэтмен поднимает ставки в войне с криминалом. С помощью лейтенанта Джима Гордона и прокурора Харви Дента он намерен очистить улицы от преступности, отравляющей город. '
+                                                                                                'Сотрудничество оказывается эффективным, но скоро они обнаружат себя посреди хаоса, развязанного восходящим криминальным гением, известным испуганным горожанам под именем Джокер.')
+                                                                                    id_list.append(id13)
+                                                                                if requests1 == '2':
+                                                                                    attachments = [
+                                                                                        'video-36369229_162146076_91f25a3be173f01028']
+                                                                                    id14 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '2. Начало \n'
+                                                                                                'Inception (2010) \n'
+                                                                                                'Фантастика, боевик триллер\n'
+                                                                                                'США, Великобритания, 2:28\n\n\n'
+                                                                                                'Кобб – талантливый вор, лучший из лучших в опасном искусстве извлечения: он крадет ценные секреты из глубин подсознания во время сна, когда человеческий разум наиболее уязвим.'
+                                                                                                ' Редкие способности Кобба сделали его ценным игроком в привычном к предательству мире промышленного шпионажа, но они же превратили его в извечного беглеца и лишили всего, что он когда-либо любил.'
+                                                                                                'И вот у Кобба появляется шанс исправить ошибки. Его последнее дело может вернуть все назад, но для этого ему нужно совершить невозможное – инициацию.'
+                                                                                                ' Вместо идеальной кражи Кобб и его команда спецов должны будут провернуть обратное. '
+                                                                                                'Теперь их задача – не украсть идею, а внедрить ее. Если у них получится, это и станет идеальным преступлением.'
+                                                                                                'Но никакое планирование или мастерство не могут подготовить команду к встрече с опасным противником, который, кажется, предугадывает каждый их ход.'
+                                                                                                ' Врагом, увидеть которого мог бы лишь Кобб.')
+                                                                                    id_list.append(id14)
+                                                                                if requests1 == '3':
+                                                                                    attachments = [
+                                                                                        'video-67434978_170258348_02b4d985ec3ded59d8']
+                                                                                    id15 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '3. Матрица  \n'
+                                                                                                'The Matrix (1999)\n'
+                                                                                                'Фантастика, боевик \n'
+                                                                                                'США, 2:16\n\n\n'
+                                                                                                'Жизнь Томаса Андерсона разделена на две части: днём он - самый обычный офисный работник, получающий нагоняи от начальства, а ночью превращается в хакера по имени Нео, и нет места в сети, куда он не смог бы дотянуться.'
+                                                                                                'Но однажды всё меняется — герой, сам того не желая, узнаёт страшную правду: всё, что его окружает — не более, чем иллюзия, Матрица, а люди — всего лишь источник питания для искусственного интеллекта, поработившего человечество.'
+                                                                                                'И только Нео под силу изменить расстановку сил в этом чужом и страшном мире.')
+                                                                                    id_list.append(id15)
+                                                                                if requests1 == '4':
+                                                                                    attachments = [
+                                                                                        'video-16395362_169453792_57742a263fbc1f1899']
+                                                                                    vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '4. Интерстеллар\n'
+                                                                                                'Interstellar (2014)\n'
+                                                                                                'Фантастика, драма, приключения\n'
+                                                                                                'США, Великобритания, Канада, 2:49\n\n\n'
+                                                                                                'Когда засуха приводит человечество к продовольственному кризису, коллектив исследователей и учёных отправляется сквозь червоточину '
+                                                                                                '(которая предположительно соединяет области пространства-времени через большое расстояние) в путешествие,'
+                                                                                                ' чтобы превзойти прежние ограничения для космических путешествий человека и переселить человечество на другую планету.')
+                                                                                if requests1 == '5':
+                                                                                    attachments = [
+                                                                                        'video-108943641_456239861_1bc85ef2f4db53e911']
+                                                                                    id16 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '5. Назад в будущее \n'
+                                                                                                'Back to the Future (1985)\n'
+                                                                                                'США, 1:56\n\n\n'
+                                                                                                'Подросток Марти с помощью машины времени, сооружённой его другом-профессором доком Брауном, попадает из 80-х в далекие 50-е.'
+                                                                                                ' Там он встречается со своими будущими родителями, ещё подростками, и другом-профессором, совсем молодым.')
+                                                                                    id_list.append(id16)
+                                                                                if requests1 == '6':
+                                                                                    attachments = [
+                                                                                        'video-53258521_456245815_48c76f72077e18c7bc']
+                                                                                    id17 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '6. Престиж\n'
+                                                                                                'The Prestige (2006)\n'
+                                                                                                'Фантастика, триллер, драма\n'
+                                                                                                'США, Великобритания, 2:05\n\n\n'
+                                                                                                'Роберт и Альфред - фокусники-иллюзионисты, которые на рубеже XIX и XX веков соперничали друг с другом в Лондоне. С годами их дружеская конкуренция на профессиональной почве перерастает в настоящую войну.'
+                                                                                                'Они готовы на все, чтобы выведать друг у друга секреты фантастических трюков и сорвать их исполнение. Непримиримая вражда, вспыхнувшая между ними, начинает угрожать жизни окружающих их людей…')
+                                                                                    id_list.append(id17)
+                                                                                if requests1 == '7':
+                                                                                    attachments = [
+                                                                                        'video-36621543_456242821_1249cb2d5e86dcba33']
+                                                                                    id18 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '7. Терминатор 2: Судный день \n'
+                                                                                                'Terminator 2: Judgement day (1991)\n'
+                                                                                                'США, Франция, 2:17\n\n\n'
+                                                                                                'Прошло более десяти лет с тех пор, как киборг-терминатор из 2029 года пытался уничтожить Сару Коннор — женщину, чей будущий сын выиграет войну человечества против машин.'
+                                                                                                'Теперь у Сары родился сын Джон и время, когда он поведёт за собой выживших людей на борьбу с машинами, неумолимо приближается. '
+                                                                                                'Именно в этот момент из постапокалиптического будущего прибывает новый терминатор — практически неуязвимый и способный принимать любое обличье.'
+                                                                                                ' Цель нового терминатора уже не Сара, а уничтожение молодого Джона Коннора.'
+                                                                                                'Однако шансы Джона на спасение существенно повышаются, когда на помощь приходит перепрограммированный сопротивлением терминатор предыдущего поколения.'
+                                                                                                ' Оба киборга вступают в смертельный бой, от исхода которого зависит судьба человечества.')
+                                                                                    id_list.append(id18)
+                                                                                if requests1 == '8':
+                                                                                    attachments = [
+                                                                                        'video206736396_171091473_3faf9462bccfebfe34']
+                                                                                    id19 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '8. Темный рыцарь: Возрождение легенды \n'
+                                                                                                'The Dark Knight Rises (2012)\n'
+                                                                                                'Фантастика, боевик, триллер\n'
+                                                                                                'Великобритания, США, 2:45\n\n\n'
+                                                                                                'Восемь лет назад Бэтмен растворился в ночи, превратившись из героя в беглеца.'
+                                                                                                ' Приняв на себя вину за смерть прокурора Харви Дента, он пожертвовал всем. Вместе с комиссаром Гордоном они решили, что так будет лучше для всех. '
+                                                                                                'Пока преступность была раздавлена антикриминальным актом Дента, ложь действовала.'
+                                                                                                'Тем не менее, еще опаснее становится появление нового врага Бэйна, чье лицо закрыто маской.'
+                                                                                                ' Он разворачивает в Готэме чудовищную деятельность, и это вынуждает Брюса Уэйна выйти из импровизированного изгнания.'
+                                                                                                ' Однако даже надев свой костюм, Бэтмен может проиграть Бэйну.'
+                                                                                                ' Но с появлением хитрой воровки по прозвищу Женщина — Кошка с загадочным прошлым всё меняется.')
+                                                                                    id_list.append(id19)
+                                                                                if requests1 == '9':
+                                                                                    attachments = [
+                                                                                        'video-40335272_456244096_8b5ab73b8f13972fbb']
+                                                                                    id20 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '9. Шоу Трумана\n'
+                                                                                                'The Truman Show (1998)\n'
+                                                                                                'Фантастика, драма, комедия \n'
+                                                                                                'США, 1:43\n\n\n'
+                                                                                                'Представьте себе, что вы вдруг начинаете понимать, что все вокруг вас — декорации, а люди — актеры, притворяющиеся теми, кем они вам кажутся.'
+                                                                                                ' Весь ваш мир оказывается большим телесериалом, где вы исполняете главную роль, даже не подозревая об этом. Вся ваша жизнь — результат работы автора телешоу,'
+                                                                                                ' которое вот уже тридцать лет смотрит вся планета, начиная с момента вашего рождения.'
+                                                                                                'В такой ситуации оказался Труман, главный герой картины.'
+                                                                                                ' Будет ли он продолжать жить в безопасном мире, где, как он теперь знает, у него практически нет свободы выбора, или все-таки выйдет из «игры» и станет сам хозяином своей судьбы,'
+                                                                                                ' в которой его ждет не запланированная сценарием девушка?')
+                                                                                    id_list.append(id20)
+                                                                                if requests1 == '10':
+                                                                                    attachments = [
+                                                                                        'video161967959_456242006_e7f319f9181fe61410']
+                                                                                    id21 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '10. Эффект бабочки \n'
+                                                                                                'The Butterfly Effect (2003)\n'
+                                                                                                'Фантастика, триллер, драма \n'
+                                                                                                'США, Канада, 1:53\n\n\n'
+                                                                                                'Мальчик Эван перенял от своего отца-психопата, ныне запертого в доме для умалишённых, странную болезнь — он не помнит некоторых эпизодов своей жизни, '
+                                                                                                'причем в эти моменты происходили довольно странные, а то и ужасные, события.'
+                                                                                                'Возмужав и поступив в колледж, Эван делает удивительное открытие.'
+                                                                                                'Читая дневники, которые он писал в детстве по совету врача, Эван может возвращаться в детство и своими действиями изменять будущее.')
+                                                                                    id_list.append(id21)
+                                                                                elif requests1 == 'назад':
+                                                                                    id_list = write_msg(event.user_id,
+                                                                                              'Вы перемещены на шаг назад.')
+                                                                                    break
+                                                                                elif requests1 == 'пока':
+                                                                                    ragnarek = True
+                                                                                    id_list = write_msg(event.user_id, 'Пока')
+                                                                                    break
+                                                            elif requests1 == '3':
+                                                                id_list = write_msg(event.user_id,
+                                                                          'Для подробной информации о фильме, напишите номер фильма в чат.\n'
+                                                                          '1. Мстители: Финал (IMDb 8.7)\n'
+                                                                          '2. Леон (8.6 IMDb)\n'
+                                                                          '3. Гладиатор (8.5 IMDb)\n'
+                                                                          '4. Мстители: Война Бесконечности (8.5 IMDb)\n'
+                                                                          '5. Большой куш (8.3 IMDb)\n'
+                                                                          '6. Бесславные ублюдки (8.3 IMDb)\n'
+                                                                          '7. Крепкий орешек (8.2 IMDb)\n'
+                                                                          '8. Бэтмен: Начало (8.2 IMDb)\n'
+                                                                          '9. Брат (8.0 IMDb)\n'
+                                                                          '10. Шерлок Холмс (7.6 IMDb)\n'
+                                                                          'Для перемещения на шаг назад напишите слово "назад"')
+                                                                for event in longpoll.listen():
+                                                                    if event.type == VkEventType.MESSAGE_NEW:
+                                                                        if event.user_id == proverka:
+                                                                            if event.to_me:
+                                                                                requests1 = event.text
+                                                                                requests1 = requests1.lower()
+                                                                                if requests1 == '1':
+                                                                                    attachments = [
+                                                                                        'video-119758287_456239390_d3977ee33f2ebf96e7']
+                                                                                    id22 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '1. Мстители: Финал\n '
+                                                                                                "Avengers: Endgame (2019)\n"
+                                                                                                'Боевик, фантастика, приключения\n'
+                                                                                                'США, 3:01\n\n\n'
+                                                                                                'Оставшиеся в живых члены команды Мстителей и их союзники должны разработать новый план, '
+                                                                                                'который поможет противостоять разрушительным действиям могущественного титана Таноса.'
+                                                                                                ' После наиболее масштабной и трагической битвы в истории они не могут допустить ошибку.')
+                                                                                    id_list.append(id22)
+                                                                                if requests1 == '2':
+                                                                                    attachments = [
+                                                                                        'video-108943641_456239253_5bf73c10224b0b0e35']
+                                                                                    id23 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '2. Леон\n '
+                                                                                                "Leon (1994)\n"
+                                                                                                'Боевик, триллер, драма\n'
+                                                                                                'Франция, 2:13\n\n\n'
+                                                                                                'Профессиональный убийца Леон, не знающий пощады и жалости, знакомится со своей очаровательной соседкой Матильдой, '
+                                                                                                'семью которой расстреливают полицейские, замешанные в торговле наркотиками.'
+                                                                                                'Благодаря этому знакомству он впервые испытывает чувство любви, но...')
+                                                                                    id_list.append(id23)
+                                                                                if requests1 == '3':
+                                                                                    attachments = [
+                                                                                        'video-47366412_456243060_e00e634bbaaef613f7']
+                                                                                    id24 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '3. Гладиатор\n '
+                                                                                                "Gladiator (2000)\n"
+                                                                                                'Боевик, драма, приключения\n\n\n'
+                                                                                                'В великой Римской империи не было военачальника, равного генералу Максимусу.'
+                                                                                                'Непобедимые легионы, которыми командовал этот благородный воин, боготворили его и могли последовать за ним даже в ад.'
+                                                                                                'Но случилось так, что отважный Максимус, готовый сразиться с любым противником в честном бою, оказался бессилен против вероломных придворных интриг.'
+                                                                                                'Генерала предали и приговорили к смерти. Чудом избежав гибели, Максимус становится гладиатором.'
+                                                                                                'Быстро снискав себе славу в кровавых поединках, он оказывается в знаменитом римском Колизее,'
+                                                                                                ' на арене которого он встретится в смертельной схватке со своим заклятым врагом...')
+                                                                                    id_list.append(id24)
+                                                                                if requests1 == '4':
+                                                                                    attachments = [
+                                                                                        'video-36516005_456239918_47816b9e148dafdbe3']
+                                                                                    id25 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '4. Мстители: Война Бесконечности \n '
+                                                                                                "Avengers: Infinity war (2018)\n"
+                                                                                                'Боевик, фантастика, приключения\n'
+                                                                                                'США, 2:29\n\n\n'
+                                                                                                'Пока Мстители и их союзники продолжают защищать мир от различных опасностей, с которыми не смог бы справиться один супергерой, новая угроза возникает из космоса: Танос.'
+                                                                                                ' Межгалактический тиран преследует цель собрать все шесть Камней Бесконечности - артефакты невероятной силы, с помощью которых можно менять реальность по своему желанию.'
+                                                                                                ' Всё, с чем Мстители сталкивались ранее, вело к этому моменту – судьба Земли никогда ещё не была столь неопределённой.')
+                                                                                    id_list.append(id25)
+                                                                                if requests1 == '5':
+                                                                                    attachments = [
+                                                                                        'video-28669713_456239721_bbabe4d493e23cdeae']
+                                                                                    id26 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '5. Большой куш\n '
+                                                                                                "Snatch (2000)\n"
+                                                                                                'Боевик, криминал, комедия \n'
+                                                                                                'Великобритания, США, 1:44\n\n\n'
+                                                                                                'Четырехпалый Френки должен был переправить краденый алмаз из Англии в США своему боссу Эви. '
+                                                                                                'Но вместо этого герой попадает в эпицентр больших неприятностей.'
+                                                                                                'Сделав ставку на подпольном боксерском поединке, Френки попадает в круговорот весьма нежелательных событий.'
+                                                                                                'Вокруг героя и его груза разворачивается сложная интрига с участием множества колоритных персонажей лондонского дна - русского гангстера,'
+                                                                                                ' троих незадачливых грабителей, хитрого боксера и угрюмого громилы грозного мафиози.'
+                                                                                                ' Каждый норовит в одиночку сорвать Большой Куш.')
+                                                                                    id_list.append(id26)
+                                                                                if requests1 == '6':
+                                                                                    attachments = [
+                                                                                        'video-137362039_456240434_b261470acb6ced9ec5']
+                                                                                    id27 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '6. Бесславные ублюдки\n '
+                                                                                                "Inglorious Basterds\n"
+                                                                                                'Боевик, драма, комедия \n'
+                                                                                                'США, 2:33\n\n\n'
+                                                                                                'Вторая мировая война, в оккупированной немцами Франции группа американских солдат-евреев наводит '
+                                                                                                'страх на нацистов, жестоко убивая и скальпируя солдат.')
+                                                                                    id_list.append(id27)
+                                                                                if requests1 == '7':
+                                                                                    attachments = [
+                                                                                        'video-40335272_456244080_3935ae119b4265bdbe']
+                                                                                    id28 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '7. Крепкий орешек \n '
+                                                                                                "Die Hard (1988)\n"
+                                                                                                'Боевик, триллер, криминал\n'
+                                                                                                'США, 2:13\n\n\n'
+                                                                                                'В суперсовременном небоскребе Лос-Анджелеса полицейский Джон Макклейн ведет смертельную схватку с бандой политических террористов, '
+                                                                                                'взявших в заложники два десятка человек, в число которых попадает и его жена.'
+                                                                                                'Началось все с того, что парень приехал в город к жене, оказался на рождественском приеме, а кончилось настоящей войной...')
+                                                                                    id_list.append(id28)
+                                                                                if requests1 == '8':
+                                                                                    attachments = [
+                                                                                        'video-56028029_456248004_de810a5992b9683d1a']
+                                                                                    id29 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '8. Бэтмен: Начало \n '
+                                                                                                "Batman Begins (2005)\n"
+                                                                                                'Боевик, приключения, фантастика\n\n\n'
+                                                                                                'В детстве юный наследник огромного состояния Брюс Уэйн оказался свидетелем убийства своих родителей, и тогда он решил бороться с преступностью. '
+                                                                                                'Спустя годы он отправляется в путешествие по миру, чтобы найти способ восстановить справедливость. Обучение у мудрого наставника боевым искусствам дает ему силу и смелость. '
+                                                                                                'Вернувшись в родной город, Уэйн становится Бэтменом и ведет борьбу со злом.')
+                                                                                    id_list.append(id29)
+                                                                                if requests1 == '9':
+                                                                                    attachments = [
+                                                                                        'video168333290_170743544_8de17e614abd1e9008']
+                                                                                    id30 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '9. Брат (1997)\n '
+                                                                                                'Боевик, драма, криминал \n'
+                                                                                                'Россия, 1:40\n\n\n'
+                                                                                                'Демобилизованный из армии, Данила Багров вернулся в родной городок. '
+                                                                                                'Но скучная жизнь российской провинции не устраивала его, и он решился податься в Петербург, где, по слухам, уже несколько лет процветает его старший брат.'
+                                                                                                ' Данила нашел брата.'
+                                                                                                ' Но все оказалось не так просто - брат был наемным убийцей...')
+                                                                                    id_list.append(id30)
+                                                                                if requests1 == '10':
+                                                                                    attachments = [
+                                                                                        'video-28669713_456239384_d986dd8239c1cef75d']
+                                                                                    id31 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '10. Шерлок Холмс \n '
+                                                                                                "Sherlock Holmes (2009)\n"
+                                                                                                'Боевик, триллер, драма\n'
+                                                                                                'США, Германия, 2:08\n\n\n'
+                                                                                                'Сымитировав помешательство в надежде избежать тюремного заключения, Рэндл Патрик МакМерфи попадает в психиатрическую клинику, где почти безраздельным хозяином является жестокосердная сестра Милдред Рэтчед.'
+                                                                                                'МакМерфи поражается тому, что прочие пациенты смирились с существующим положением вещей, а некоторые – даже сознательно пришли в лечебницу, прячась от пугающего внешнего мира.'
+                                                                                                'И решается на бунт. В одиночку.')
+                                                                                    id_list.append(id31)
+                                                                                elif requests1 == 'назад':
+                                                                                    id_list = write_msg(event.user_id,
+                                                                                              'Вы перемещены на шаг назад.')
+                                                                                    break
+                                                                                elif requests1 == 'пока':
+                                                                                    ragnarek = True
+                                                                                    id_list = write_msg(event.user_id, 'Пока')
+                                                                                    break
+                                                            elif requests1 == '4':
+                                                                id_list = write_msg(event.user_id,
+                                                                          'Для подробной информации о фильме, напишите номер фильма в чат.\n'
+                                                                          '1. Криминальное чтиво (8.9 IMDb)\n'
+                                                                          '2. Бойцовский клуб (8.8 IMDb)\n'
+                                                                          '3. Молчание ягнят (8.6 IMDb)\n'
+                                                                          '4. Семь (8.6 IMDb)\n'
+                                                                          '5. Отступники (8.5 IMDb)\n'
+                                                                          '6. Бешеные псы (8.3 IMDb)\n'
+                                                                          '7. Остров проклятых (8.1 IMDb)\n'
+                                                                          '8. Шестое чувство (8.1 IMDb)\n'
+                                                                          '9. Игра (7.8 IMDb)\n'
+                                                                          '10. Адвокат дьявола (7.5 IMDb)\n'
+                                                                          'Для перемещения на шаг назад напишите слово "назад"')
+                                                                for event in longpoll.listen():
+                                                                    if event.type == VkEventType.MESSAGE_NEW:
+                                                                        if event.user_id == proverka:
+                                                                            if event.to_me:
+                                                                                requests1 = event.text
+                                                                                requests1 = requests1.lower()
+                                                                                if requests1 == '1':
+                                                                                    attachments = [
+                                                                                        'video-108943641_456239332_5884495bf5ab213bf4']
+                                                                                    id32 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '1. Криминальное чтиво \n '
+                                                                                                "Pulp fiction (1994)\n"
+                                                                                                'Триллер, комедия, криминал \n'
+                                                                                                'США, 2:34\n\n\n'
+                                                                                                'Двое бандитов Винсент Вега и Джулс Винфилд ведут философские беседы в перерывах между разборками и решением проблем с должниками криминального босса Марселласа Уоллеса.'
+                                                                                                'В первой истории Винсент проводит незабываемый вечер с женой Марселласа Мией. '
+                                                                                                'Во второй рассказывается о боксёре Бутче Кулидже, купленном Уоллесом, чтобы сдать бой. '
+                                                                                                'В третьей истории Винсент и Джулс по нелепой случайности попадают в неприятности.')
+                                                                                    id_list.append(id32)
+                                                                                if requests1 == '2':
+                                                                                    attachments = [
+                                                                                        'video-34335548_456240028_b0bbb759b599a8d5ea']
+                                                                                    id33 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '2. Бойцовский клуб \n '
+                                                                                                "The Fight Club (1999)\n"
+                                                                                                'Триллер, драма, криминал\n'
+                                                                                                'США, Германия, 2:19\n\n\n'
+                                                                                                'Сотрудник страховой компании страдает хронической бессонницей и отчаянно пытается вырваться из мучительно скучной жизни.'
+                                                                                                ' Однажды в очередной командировке он встречает некоего Тайлера Дёрдена — харизматического торговца мылом с извращенной философией.'
+                                                                                                ' Тайлер уверен, что самосовершенствование — удел слабых, а единственное, ради чего стоит жить — саморазрушение.'
+                                                                                                'Проходит немного времени, и вот уже новые друзья лупят друг друга почем зря на стоянке перед баром, и очищающий мордобой доставляет им высшее блаженство. '
+                                                                                                'Приобщая других мужчин к простым радостям физической жестокости, они основывают тайный Бойцовский клуб, который начинает пользоваться невероятной популярностью.')
+                                                                                    id_list.append(id33)
+                                                                                if requests1 == '3':
+                                                                                    attachments = [
+                                                                                        'video36621543_456242722_727de281360350d1e2']
+                                                                                    id34 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '3. Молчание ягнят \n '
+                                                                                                "The Silence of the Lambs (1990)\n"
+                                                                                                'Триллер, криминал, детектив \n'
+                                                                                                'США, 1:54\n\n\n'
+                                                                                                'Психопат похищает и убивает молодых женщин по всему Среднему Западу Америки. '
+                                                                                                'ФБР, уверенное в том, что все преступления совершены одним и тем же человеком, поручает агенту Клариссе Старлинг '
+                                                                                                'встретиться с заключенным-маньяком, который мог бы объяснить следствию психологические мотивы серийного убийцы и тем самым вывести на его след.'
+                                                                                                'Заключенный, доктор психиатрии Ганнибал Лектер, отбывает наказание за убийства и каннибализм. '
+                                                                                                'Он согласен помочь Клариссе лишь в том случае, если она попотчует его больное воображение подробностями своей сложной личной жизни.'
+                                                                                                'Такие двусмысленные отношения не только порождают в душе Клариссы внутренний конфликт, но и сталкивают ее лицом к лицу с помешанным до гениальности убийцей.'
+                                                                                                'Воплощение дьявола настолько сильно, что ей может не хватить мужества и стойкости, чтобы остановить его...')
+                                                                                    id_list.append(id34)
+                                                                                if requests1 == '4':
+                                                                                    attachments = [
+                                                                                        'video-53258521_456239999_2285ea01fa6c95e956']
+                                                                                    id35 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '4. Семь \n '
+                                                                                                "Se7en (1995)\n"
+                                                                                                'Триллер, драма, криминал \n'
+                                                                                                'США, 2:07\n\n\n'
+                                                                                                'Детектив Уильям Сомерсет - ветеран уголовного розыска, мечтающий уйти на пенсию и уехать подальше от города и грешных обитателей. '
+                                                                                                'За 7 дней до пенсии на Сомерсета сваливаются две неприятности: молодой напарник Миллс и особо изощренное убийство.'
+                                                                                                ' Острый ум опытного сыщика сразу определяет, что за этим преступлением, скорее всего, последуют другие. Новости подтверждают его догадку.'
+                                                                                                ' Поняв, что убийца наказывает свои жертвы за совершенные ими смертные грехи, детектив встает перед выбором: вернуться к работе либо уйти и передать дело своему менее опытному напарнику?')
+                                                                                    id_list.append(id35)
+                                                                                if requests1 == '5':
+                                                                                    attachments = [
+                                                                                        'video140585205_456239030_d12785e94021961157']
+                                                                                    id36 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '5. Отступники \n '
+                                                                                                "The Departed (2006)\n"
+                                                                                                'Триллер, драма, криминал \n'
+                                                                                                'США, Гонконг, 2:31\n\n\n'
+                                                                                                'Два лучших выпускника полицейской академии оказались по разные стороны баррикады: '
+                                                                                                'один из них – агент мафии в рядах правоохранительных органов, другой – «крот», внедрённый в мафию. '
+                                                                                                'Каждый считает своим долгом обнаружить и уничтожить противника, '
+                                                                                                'но постоянная жизнь в искажённых реалиях меняет внутренний мир героев.')
+                                                                                    id_list.append(id36)
+                                                                                if requests1 == '6':
+                                                                                    attachments = [
+                                                                                        'video-36621543_456242874_1bfc3f3617dd8c0d6f']
+                                                                                    id37 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '6. Бешеные псы \n '
+                                                                                                "Reservoir Dogs (1991)\n"
+                                                                                                'Триллер, драма, криминал \n'
+                                                                                                'США, 1:40\n\n\n'
+                                                                                                'Это должно было стать идеальным преступлением. '
+                                                                                                'Задумав ограбить ювелирный магазин, криминальный босс Джо Кэбот собрал вместе шестерых опытных и совершенно незнакомых друг с другом преступников. '
+                                                                                                'Но с самого начала все пошло не так, и обычный грабеж превратился в кровавую бойню.')
+                                                                                    id_list.append(id37)
+                                                                                if requests1 == '7':
+                                                                                    attachments = [
+                                                                                        'video-81032294_171801045_9bedb09e2cdc847d29']
+                                                                                    id38 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '7. Остров проклятых \n '
+                                                                                                "Shutter Island (2009)\n"
+                                                                                                'Триллер, детектив, драма\n'
+                                                                                                'США, 2:18\n\n\n'
+                                                                                                'Два американских судебных пристава отправляются на один из островов в штате Массачусетс, '
+                                                                                                'чтобы расследовать исчезновение пациентки клиники для умалишенных преступников. '
+                                                                                                'При проведении расследования им придется столкнуться с паутиной лжи, обрушившимся ураганом и смертельным бунтом обитателей клиники.')
+                                                                                    id_list.append(id38)
+                                                                                if requests1 == '8':
+                                                                                    attachments = [
+                                                                                        'video-81032294_171580842_fbc3ea2d0389b07e24']
+                                                                                    id39 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '8. Шестое чувство \n '
+                                                                                                "The Six Sense (1999)\n"
+                                                                                                'Триллер, драма, детектив\n'
+                                                                                                'США, 1:47\n\n\n'
+                                                                                                'Детский психиатр Малкольм Кроу сталкивается со странным случаем: девятилетнего Коула посещают страшные видения - призраки умерших. '
+                                                                                                'Все эти люди когда-то были убиты, и теперь они обрушивают на малыша свой гнетущий страх и отчаянный гнев.'
+                                                                                                'Как врач Малкольм бессилен помочь.'
+                                                                                                ' Но как человек он пытается найти ключ к ужасному миру Коула, в котором веет дыхание смерти и распускаются страшные цветы боли.')
+                                                                                    id_list.append(id39)
+                                                                                if requests1 == '9':
+                                                                                    attachments = [
+                                                                                        'video-101942969_456240467_3176ad897a1fb8b975']
+                                                                                    id40 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '9. Игра\n '
+                                                                                                "The Game (1997)\n"
+                                                                                                'Триллер, драма, детектив \n'
+                                                                                                'США, 2:09\n\n\n'
+                                                                                                'Николас Ван Ортон - само воплощение успеха.'
+                                                                                                ' Он преуспевает, он невозмутим и спокоен, привык держать любую ситуацию под контролем.'
+                                                                                                ' На день рождения Николас получает необычный подарок - билет для участия в «Игре».'
+                                                                                                'Ему обещают, что игра вернет яркие чувства, позволит ощутить вкус и остроту жизни.'
+                                                                                                ' Вступив в игру, Николас начинает осознавать, что это игра всерьез, игра не на жизнь, а на смерть.')
+                                                                                    id_list.append(id40)
+                                                                                if requests1 == '10':
+                                                                                    attachments = [
+                                                                                        'video-56028029_456248533_19cd51f6a044cacf2c']
+                                                                                    id41 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '10. Адвокат дьявола \n '
+                                                                                                "The Devil's Advocate (1997)\n"
+                                                                                                'Триллер, драма, детектив \n'
+                                                                                                'США, Германия, 2:24\n\n\n'
+                                                                                                'В Нью-Йорк по приглашению главы крупного юридического концерна прибывает Кевин Ломакс, молодой адвокат. '
+                                                                                                'До этого он был известен тем, что защищал исключительно негодяев и притом не проиграл ни одного процесса.'
+                                                                                                ' На новом месте работы он вполне счастлив, он живет в роскошной квартире с любящей женой, его окружают интересные люди.')
+                                                                                    id_list.append(id41)
+                                                                                elif requests1 == 'назад':
+                                                                                    id_list = write_msg(event.user_id,
+                                                                                              'Вы перемещены на шаг назад.')
+                                                                                    break
+                                                                                elif requests1 == 'пока':
+                                                                                    ragnarek = True
+                                                                                    id_list = write_msg(event.user_id, 'Пока')
+                                                                                    break
+                                                            elif requests1 == '5':
+                                                                id_list = write_msg(event.user_id,
+                                                                          'Для подробной информации о фильме, напишите номер фильма в чат.\n'
+                                                                          '1. Подозрительные лица (8.6 IMDb)\n'
+                                                                          '2. Помни (8.5 IMDb)\n'
+                                                                          '3. Таксист (8.3 IMDb)\n'
+                                                                          '4. Секреты Лос-Анджелеса (8.3 IMDb)\n'
+                                                                          '5. Бегущий по лезвию 2049 (8 IMDb)\n'
+                                                                          '6. Счастливое число Слевина (7.8 IMDb)\n'
+                                                                          '7. 300 спартанцев (7.7 IMDb)\n'
+                                                                          '8. Эквилибриум (7.5 IMDb)\n'
+                                                                          '9. Человек-паук (7.3 IMDb)\n'
+                                                                          '10. Ничего хорошего в эль рояль (7.2 IMDb)\n'
+                                                                          'Для перемещения на шаг назад напишите слово "назад"')
+                                                                for event in longpoll.listen():
+                                                                    if event.type == VkEventType.MESSAGE_NEW:
+                                                                        if event.user_id == proverka:
+                                                                            if event.to_me:
+                                                                                requests1 = event.text
+                                                                                requests1 = requests1.lower()
+                                                                                if requests1 == '1':
+                                                                                    attachments = [
+                                                                                        'video187350425_456239562_e735638cafa69795b8']
+                                                                                    id42 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '1. Подозрительные лица \n '
+                                                                                                "The Usual Suspects (1995)\n"
+                                                                                                'Триллер, детектив, криминал\n'
+                                                                                                'США, Германия, 1:46\n\n\n'
+                                                                                                'Обычно, если есть преступление, есть мотив. '
+                                                                                                'Обычно, если проводится опознание, по крайней мере есть один подозреваемый. '
+                                                                                                'Но это не было обычным преступлением... '
+                                                                                                'Пятеро преступников столкнулись в одном необычном месте и решили прокрутить одно дельце. '
+                                                                                                'Но кто-то более сильный и могущественный, кто-то, чье имя пугает всех преступников мира, хочет, чтобы они поработали на него... '
+                                                                                                'Это не было обычным преступлением, и они - не просто подозрительные лица...')
+                                                                                    id_list.append(id42)
+                                                                                if requests1 == '2':
+                                                                                    attachments = [
+                                                                                        'video-65384898_171532726_558d9eb729db240319']
+                                                                                    id43 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '2. Помни\n '
+                                                                                                "Momento (2000)\n"
+                                                                                                'Триллер, детектив, драма\n'
+                                                                                                'США, 1:53\n\n\n'
+                                                                                                'Леонард Шелби изысканно и дорого одет, ездит на новеньком «Ягуаре», но проживает в дешевых мотелях. '
+                                                                                                'Его цель в жизни — найти убийцу жены. '
+                                                                                                'Его проблема — редкая форма амнезии, потеря короткой памяти, помня все до убийства, он не помнит, что было пятнадцать минут назад.')
+                                                                                    id_list.append(id43)
+                                                                                if requests1 == '3':
+                                                                                    attachments = [
+                                                                                        'video-113071474_456241903_8d4b987dfb25d40a8d']
+                                                                                    id44 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '3. Таксист \n '
+                                                                                                "The Driver (1976)\n"
+                                                                                                'Триллер, драма, криминал\n'
+                                                                                                'США, 1:54\n\n\n'
+                                                                                                'Тусклый свет слепых фонарей, скелеты фабричных труб, задыхающихся в собственном дыму. '
+                                                                                                'Вавилонские башни небоскребов, все это - ад Нового времени, Нью-Йорк.'
+                                                                                                'Ветеран вьетнамской войны Трэйвис Бикл ведет свое одинокое такси по ночным улицам бесконечного города, и перед ним разворачивается мрачная панорама человеческих грехов. '
+                                                                                                'Как ветхозаветный пророк, он надеется, что однажды небеса пошлют на землю спасительный дождь, который очистит Нью-Йорк от вековой грязи.'
+                                                                                                'А когда умирает надежда, остается только ненависть. '
+                                                                                                'Огненный ливень обрушится на головы грешников. Таксист позаботится об этом.')
+                                                                                    id_list.append(id44)
+                                                                                if requests1 == '4':
+                                                                                    attachments = [
+                                                                                        'video119848540_170936214_7061d75cbabee261a7']
+                                                                                    id45 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '4. Секреты Лос-Анджелеса\n '
+                                                                                                "L.A. Confidential (1997)\n"
+                                                                                                'Триллер, драма, криминал\n'
+                                                                                                'США, 2:18\n\n\n'
+                                                                                                'Бад Уайт и Эд Эксли работают в полиции Лос-Анджелеса. '
+                                                                                                'Люди они настолько разные, что порою ненавидят друг друга.'
+                                                                                                ' Но их объединяет общее дело - расследование группового убийства.'
+                                                                                                ' Оба пришли в полицию, чтобы бороться со злом, и оба - по личным причинам.')
+                                                                                    id_list.append(id45)
+                                                                                if requests1 == '5':
+                                                                                    attachments = [
+                                                                                        'video-53258521_456246136_105502974d044126b1']
+                                                                                    id46 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '5. Бегущий по лезвию 2049\n '
+                                                                                                "Blade Runner 2049 (2017)\n"
+                                                                                                'Фантастика, триллер, драма\n'
+                                                                                                'США, Великобритания, Венгрия, 2:44\n\n\n'
+                                                                                                'В недалеком будущем мир населен людьми и репликантами, созданными выполнять самую тяжелую работу. '
+                                                                                                'Работа офицера полиции Кей - держать репликантов под контролем в условиях нарастающего напряжения... '
+                                                                                                'Пока он случайно не становится обладателем секретной информации, которая ставит под угрозу существование всего человечества. '
+                                                                                                'Желая найти ключ к разгадке, Кей решает разыскать Рика Декарда, бывшего офицера специального подразделения полиции Лос-Анджелеса, который бесследно исчез много лет назад.')
+                                                                                    id_list.append(id46)
+                                                                                if requests1 == '6':
+                                                                                    attachments = [
+                                                                                        'video-40870056_456239340_5271c8c56c721db460']
+                                                                                    id47 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '6. Счастливое число Слевина \n '
+                                                                                                "Lucky Number Slevin (2005)\n"
+                                                                                                'Триллер, драма, криминал\n'
+                                                                                                'Германия, Великобритания, США, 1:50\n\n\n'
+                                                                                                'Слевину не везет. Дом опечатан, девушка ушла к другому… '
+                                                                                                'Его друг Ник уезжает из Нью-Йорка и предлагает Слевину пожить в пустой квартире.'
+                                                                                                'В это время крупный криминальный авторитет по прозвищу'
+                                                                                                'Босс хочет рассчитаться со своим бывшим партнером за убийство сына и в отместку «заказать» его наследника.')
+                                                                                    id_list.append(id47)
+                                                                                if requests1 == '7':
+                                                                                    attachments = [
+                                                                                        'video-57648499_167574213_5544a502847efa7708']
+                                                                                    id48 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '7. 300 спартанцев \n '
+                                                                                                "300 (2007)\n"
+                                                                                                'Фэнтези, боевик\n'
+                                                                                                'США, 1:57\n\n\n'
+                                                                                                'События картины повествуют о кровопролитной битве при Фермопилах в 480 году до н.э.,'
+                                                                                                ' в которой триста отважных спартанцев во главе со своим царем Леонидом преградили путь многотысячной армии персидского царя Ксеркса.'
+                                                                                                'Несмотря на численный перевес персов, спартанцы продолжали упорную оборону, проявив мужество и отвагу.'
+                                                                                                'Их бесстрашие и героизм вдохновили всю Грецию на объединение против непобедимого врага, переломив тем самым ход Греко-персидских войн…')
+                                                                                    id_list.append(id48)
+                                                                                if requests1 == '8':
+                                                                                    attachments = [
+                                                                                        'video-36455846_456243212_9ed3a1a861e1394346']
+                                                                                    id49 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '8. Эквилибриум \n '
+                                                                                                "Equilibrium (2002)\n"
+                                                                                                'Фантастика, боевик, триллер\n'
+                                                                                                'США, 1:47\n\n\n'
+                                                                                                'Действие происходит в будущем, когда люди лишены возможности выражать какие-то эмоции, потому, что они… запрещены. '
+                                                                                                'Это - та цена, которую человечество платит за устранение из своей жизни войны. Теперь книги, искусство и музыка находятся вне закона. '
+                                                                                                'А любое чувство - уже преступление, наказуемое смертью.'
+                                                                                                'Для проведения в жизнь существующего правила используется принудительное применение лекарства «прозиум». '
+                                                                                                'Правительственный агент Джон Престон борется с теми, кто нарушает правила. '
+                                                                                                'В один прекрасный момент он забывает принять очередную дозу лекарства и с ним происходит духовное превращение, что приводит его к противоречию с самим собой и с начальством.')
+                                                                                    id_list.append(id49)
+                                                                                if requests1 == '9':
+                                                                                    attachments = [
+                                                                                        'video-132343249_456239178_e0bd6029dd2bc412d2']
+                                                                                    id50 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '9. Человек-паук \n '
+                                                                                                "Spider-Man (2002)\n"
+                                                                                                'Фантастика, боевик, приключения\n'
+                                                                                                'США, 2:01\n\n\n'
+                                                                                                'Питер Паркер – обыкновенный школьник. Однажды он отправился с классом на экскурсию, где его кусает странный паук-мутант. '
+                                                                                                'Через время парень почувствовал в себе нечеловеческую силу и ловкость в движении, а главное – умение лазать по стенам и метать стальную паутину.'
+                                                                                                ' Свои способности он направляет на защиту слабых. '
+                                                                                                'Так Питер становится настоящим супергероем по имени Человек-паук, который помогает людям и борется с преступностью. '
+                                                                                                'Но там, где есть супергерой, рано или поздно всегда объявляется и суперзлодей...')
+                                                                                    id_list.append(id50)
+                                                                                if requests1 == '10':
+                                                                                    attachments = [
+                                                                                        'video-141947243_456239028_f6bae92ffa068ccb97']
+                                                                                    id51 = vk.messages.send(
+                                                                                        user_id=event.user_id,
+                                                                                        attachment=attachments,
+                                                                                        random_id=0,
+                                                                                        message='Иформация о фильме:\n'
+                                                                                                '10. Ничего хорошего в отеле «Эль Рояль»\n '
+                                                                                                "Bad Times at the El Royale (2018)\n"
+                                                                                                'Триллер, драма, криминал\n'
+                                                                                                'США, 2:21\n\n\n'
+                                                                                                'Семь незнакомцев, у каждого из которых есть своя тайна, встречаются в заброшенном отеле «Эль Рояль» на озере Тахо. '
+                                                                                                'И этой ночью у каждого будет шанс на искупление… прежде чем всё пойдет к чертям.')
+                                                                                    id_list.append(id51)
+                                                                                elif requests1 == 'назад':
+                                                                                    id_list = write_msg(event.user_id,
+                                                                                              'Вы перемещены на шаг назад.')
+                                                                                    break
+                                                                                elif requests1 == 'пока':
+                                                                                    ragnarek = True
+                                                                                    id_list = write_msg(event.user_id, 'Пока')
+                                                                                    break
+                                                            elif requests1 == 'назад':
+                                                                id_list = write_msg(event.user_id, 'Вы перемещены на шаг назад.')
+                                                                break
+                                                            elif requests1 == 'пока':
+                                                                ragnarek = True
+                                                                id_list = write_msg(event.user_id, 'Пока')
+                                                                break
+                                        elif requests1 == '8':
+                                            response = requests.get(
+                                                'https://yandex.ru/search/?text=%D0%BD%D0%BE%D0%B2%D0%B8%D0%BD%D0%BA%D0%B8%20%D0%BA%D0%B8%D0%BD%D0%BE%20&lr=213&clid=2270455&win=341')
+                                            soup = BeautifulSoup(response.text, 'html.parser')
+                                            RespKinoList = soup.find_all('div', class_="scroller__container")
+                                            for i in range(4):
+                                                genre = RespKinoList[0].contents[0].contents[i].contents[0].contents[0].contents[0].contents[1].contents[1].next_element
+                                                genre = genre[5:]
+                                                id_list = write_msg(event.user_id,'{}\nГод выпуска и жанр:{}\n{}'.format(
+                                                    RespKinoList[0].contents[0].contents[i].contents[0].contents[0].contents[0].contents[1].contents[0].next,
+                                                    genre,
+                                                    RespKinoList[0].contents[0].contents[i].contents[0].contents[0].contents[0].contents[0].contents[0].attrs['src']))
+                                                time.sleep(1)
+                                        elif requests1 == '9':
+                                            response = requests.get('https://yandex.ru')
+                                            soup = BeautifulSoup(response.text, 'html.parser')
+                                            responlist = soup.find_all('div',
+                                                                       class_="inline-stocks__content text_black_yes")
+                                            responlist = responlist[0].contents
+                                            id_list = write_msg(event.user_id,
+                                                      "Доллар:" + responlist[1].contents[1].contents[
+                                                          1].next_element + '\n' + 'Евро:' +
+                                                      responlist[2].contents[1].contents[1].next_element)
+                                        elif requests1 == '10':
+                                            id_list = write_msg(event.user_id,
+                                                      'Напишите день, который вас интересует.(сегодня/завтра/послезавтра)')
+                                            for event in longpoll.listen():
+                                                if event.type == VkEventType.MESSAGE_NEW:
+                                                    if event.user_id == proverka:
+                                                        if event.to_me:
+                                                            requests1 = event.text
+                                                            requests1 = requests1.lower()
+                                                            response = requests.get(
+                                                                'https://pogoda.mail.ru/prognoz/moskva/14dney/')
+                                                            soup = BeautifulSoup(response.text, 'html.parser')
+                                                            RespList = soup.find_all('div',
+                                                                                     class_="cols__column__item cols__column__item_2-1 cols__column__item_2-1_ie8")
+                                                            if requests1 == 'сегодня':
+                                                                id_list = write_msg(event.user_id, 'Вот ваш прогноз погоды:\n'
+                                                                                         'Сегодня ночью: {}, {}\n'
+                                                                                         'Сегодня утром: {}, {}\n'
+                                                                                         'Сегодня днём: {}, {}\n'
+                                                                                         'Сегодня вечером: {}, {}\n'.format(
+                                                                    RespList[0].contents[1].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[0].contents[1].contents[5].contents[0],
+                                                                    RespList[0].contents[3].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[0].contents[3].contents[5].contents[0],
+                                                                    RespList[0].contents[5].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[0].contents[5].contents[5].contents[0],
+                                                                    RespList[0].contents[7].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[0].contents[7].contents[5].contents[0]))
+                                                            elif requests1 == 'завтра':
+                                                                id_list = write_msg(event.user_id, 'Вот ваш прогноз погоды:\n'
+                                                                                         'Завтра ночью: {}, {}\n'
+                                                                                         'Завтра утром: {}, {}\n'
+                                                                                         'Завтра днём: {}, {}\n'
+                                                                                         'Завтра вечером: {}, {}\n'.format(
+                                                                    RespList[1].contents[1].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[1].contents[1].contents[5].contents[0],
+                                                                    RespList[1].contents[3].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[1].contents[3].contents[5].contents[0],
+                                                                    RespList[1].contents[5].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[1].contents[5].contents[5].contents[0],
+                                                                    RespList[1].contents[7].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[1].contents[7].contents[5].contents[0]))
+                                                            elif requests1 == 'послезавтра':
+                                                                id_list = write_msg(event.user_id, 'Вот ваш прогноз погоды:\n'
+                                                                                         'Послезавтра ночью: {}, {}\n'
+                                                                                         'Послезавтра утром: {}, {}\n'
+                                                                                         'Послезавтра днём: {}, {}\n'
+                                                                                         'Послезавтра вечером: {}, {}\n'.format(
+                                                                    RespList[2].contents[1].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[2].contents[1].contents[5].contents[0],
+                                                                    RespList[2].contents[3].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[2].contents[3].contents[5].contents[0],
+                                                                    RespList[2].contents[5].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[2].contents[5].contents[5].contents[0],
+                                                                    RespList[2].contents[7].contents[7].contents[
+                                                                        1].attrs[
+                                                                        'title'],
+                                                                    RespList[2].contents[7].contents[5].contents[0]))
+                                                            elif requests1 == 'пока':
+                                                                ragnarek = True
+                                                                id_list = write_msg(event.user_id, 'Пока')
+                                                                break
+                                        elif requests1 == '11':
+                                            message1 = []
+                                            message1 = vk.messages.getHistory(
+                                                offset=-1,
+                                                count=200,
+                                                user_id=event.user_id,
+                                                start_message_id=0,)
+                                            count = message1['count']
+                                            offset = -200
+                                            all_messages = []
+                                            while offset >= -count-200:
+                                                message = []
+                                                message = vk.messages.getHistory(
+                                                    offset=offset,
+                                                    count=200,
+                                                    user_id=event.user_id,
+                                                    start_message_id=0,)
+                                                offset -= 200
+                                                all_messages.extend(message['items'])
+                                            count_of_out_msg = 0
+                                            day = 0
+                                            pastday = 0
+                                            mxmsgpday = 0
+                                            pastmxmsg = 0
+                                            att = 0
+                                            att1 = 0
+                                            finish_words_list = []
+                                            text = ""
+                                            last_string = ''
+                                            for i in range(len(all_messages)):
+                                                if all_messages[i]['from_id'] == event.user_id:
+                                                    count_of_out_msg += 1
+                                                day = time.gmtime(all_messages[i]['date'])
+                                                day = time.strftime('%j', day)
+                                                if pastday == day:
+                                                    mxmsgpday += 1
+                                                else:
+                                                    pastday = day
+                                                    if pastmxmsg <= mxmsgpday:
+                                                        pastmxmsg = mxmsgpday
+                                                    mxmsgpday = 0
+                                                if len(all_messages[i]['attachments']) > 0:
+                                                    if all_messages[i]['from_id'] == event.user_id:
+                                                        att += 1
+                                                    else:
+                                                        att1 += 1
+                                                text = text + ' ' + all_messages[i]['text']
+                                            list = text.split(' ')
+                                            for i in list:
+                                                p = morph.parse(i)[0]
+                                                finish_words_list.append(p.normal_form)
+
+                                            functors_pos = {'NOUN', 'ADJF', 'ADJS'}
+                                            filter_slov = {'быть', 'очень', 'этот', 'ещё', 'который', 'что-то',
+                                                           'тоже', 'такой', 'там', 'тот', '))', 'уже', 'весь', 'весь',
+                                                           'мочь', 'хотеть', 'где', 'сказать', 'ок', 'надо', 'сделать',
+                                                           'ладный', 'хорошо', 'говорить', 'хороший', 'один', 'ничто',
+                                                           'много', 'раз', 'вообще','какой', 'можно', 'каждый', 'потому',
+                                                           'тут', 'другой', 'самый', 'два', 'три', 'какой-то', '2',
+                                                           'тип', 'поэтому'}
+                                            fin = []
+                                            for i in finish_words_list:
+                                                if pos(i) in functors_pos:
+                                                    if i not in filter_slov:
+                                                        fin.append(i)
+                                            fin = Counter(fin)
+                                            fin = fin.most_common(30)
+                                            for list in fin:
+                                                last_string = last_string + "'" + str(list[0])+"'"' - '+str(list[1])+'\n'
+                                            id_list = write_msg(event.user_id,
+                                                                'Общее количество сообщений между мной и тобой:{}\n'
+                                                                'Количество, отправленных тобой, сообщений:{}\n'
+                                                                'Количество, отправленных мной, сообщений:{}\n'
+                                                                'Наибольшее количество сообщений за 1 день:{}\n'
+                                                                'Количество вложений, отправленных мне:{}\n'
+                                                                'Количесвто вложений, отправленных мной:{}\n'
+                                                                'Топ 30 слов в диалоге:\n{}'
+                                                                .format(count,
+                                                                        count_of_out_msg,
+                                                                        count - count_of_out_msg,
+                                                                        pastmxmsg+1, att, att1, last_string))
+                                        elif requests1 == 'очистить':
+                                            try:
+                                                delete_msg(id_list, '1')
+                                                ragnarek = True
+                                            except:
+                                                delete_msg(id_list, "0")
+                                                ragnarek = True
+                                        elif requests1 == 'пока':
+                                            write_msg(event.user_id, 'Пока')
+                                            ragnarek = True
+                                            numrandom.clear()
+                                            numrandom.append(100000)
+                                            audiorandom.clear()
+                                            audiorandom.append(100000)
+                                            break
+            elif ragnarek:
+                id_list.clear()
+                continue
+        return all_posts
 
 
 def write_msg(user_id, message):
-    vk.messages.send(
-        user_id=event.user_id,
-        random_id=0,
-        message=message)
-
-session = requests.Session()
-
-# Авторизация пользователя:
-login = '*******'
-password = '**********'
-vk_session = vk_api.VkApi(login, password)
-try:
-    vk_session.auth(token_only=True)
-except vk_api.AuthError as error_msg:
-    print(error_msg)
-
-access_token = '***********************'
-vk_session = vk_api.VkApi(token=access_token)
-vk = vk_session.get_api()
-upload = VkUpload(vk_session)  # Для загрузки изображений
-longpoll = VkLongPoll(vk_session)
+    mess_id = random.randint(0, 3000000000000)
+    id = vk.messages.send(
+                user_id=user_id,
+                random_id=mess_id,
+                message=message)
+    id_list.append(id)
+    return id_list
 
 
-for event in longpoll.listen():
-    if event.type == VkEventType.MESSAGE_NEW:
-        if event.to_me:
-            requests1 = event.text
-            requests1 = requests1.lower()
-            if requests1 == 'привет':
-                write_msg(event.user_id, 'Привет, я бот Саши. Вот, что я могу:\n'
-                                         '1.Узнать ваш id \n'
-                                         '2.Как у меня дела\n'
-                                         '3.Наибольшее количество лайков у вас на странице\n'
-                                         '4.Википедия(Введите номер 4, а затем, в следующем сообщении, слово,которое вас интересует)\n'
-                                         '5.Фото котика\n'
-                                         '6.Завершить диалог с ботом (можно написать "Пока")\n'
-                                         'Напиши номер команды или фразу/слово!!! ')
-                for event in longpoll.listen():
-                    if event.type == VkEventType.MESSAGE_NEW:
-                        if event.to_me:
-                            requests1 = event.text
-                            requests1 = requests1.lower()
-                            if requests1 == '1':
-                                write_msg(event.user_id, event.user_id)
-                            elif requests1 == '2':
-                                write_msg(event.user_id, 'Хорошо,вот бота пишу')
-                            elif requests1 == '3':
-                                try:
-                                    token = 'c0af87f4c0af87f4c0af87f462c0c4ae84cc0afc0af87f49da91136472b3a53c13132f5'
-                                    version = 5.92
-                                    domain = str(event.user_id)
-                                    offset = 0
-                                    count = 100
-                                    all_posts = []
-                                    while offset < 1000:
-                                        response = requests.get('https://api.vk.com/method/wall.get',
-                                                                params={
-                                                                    'access_token': token,
-                                                                    'v': version,
-                                                                    'owner_id': domain,
-                                                                    'count': count,
-                                                                    'offset': offset
-                                                                }
-                                                                )
-                                        data = response.json()['response']['items']
-                                        offset += 100
-                                        all_posts.extend(data)
-                                    mxlike = 0
-                                    n = -1
-                                    for i in all_posts:
-                                        n += 1
-                                        k = all_posts[n]['likes']['count']
-                                        if k > mxlike:
-                                            mxlike = k
-                                    write_msg(event.user_id, 'Наиболшее количество лайков:')
-                                    write_msg(event.user_id, mxlike)
-                                except:
-                                    write_msg(event.user_id, 'Нет постов или чертова 15-ая ошибка ')
+def pos(word, morth=pymorphy2.MorphAnalyzer()):
+    return morth.parse(word)[0].tag.POS
 
-                            elif requests1 == '4':  #
-                                for event in longpoll.listen():
-                                    if event.type == VkEventType.MESSAGE_NEW:
-                                        if event.to_me:
-                                            wikipedia.set_lang("RU")
-                                            mes = str(wikipedia.summary(event.text))
-                                            write_msg(event.user_id, 'Вот , что я нашел:\n' + mes + '\n\nСпасибо , что использовали бота.Пока!')
-                                            break
-                                            #write_msg(event.user_id,'Для вызова бота напишите опять:"Привет"')
-                            elif requests1 == '5':
-                                attachments = []
-                                urllist=['https://w-dog.ru/wallpapers/5/18/547026580393225.jpg',
-                                         'https://million-wallpapers.ru/wallpapers/2/43/15169614930530162664.jpg',
-                                         'https://img2.goodfon.ru/original/2700x1800/0/c3/britanskiy-kot-pisatel.jpg',
-                                         'https://w-dog.ru/wallpapers/6/3/330632810875751.jpg',
-                                         'https://f3.upet.com/z_2jC7cJka36fhH3l.jpg',
-                                         'https://avatars.mds.yandex.net/get-zen_doc/1328583/pub_5ac4d5dd9b403c0429e862c2_5ac4df7d9e29a22b64e17564/scale_1200',
-                                         'https://w-dog.ru/wallpapers/1/40/315048721160089.jpg',
-                                         'https://fanparty.ru/fanclubs/cats/gallery/1934353_cats.jpg',
-                                         'https://avatars.mds.yandex.net/get-pdb/1325254/3ef31cbb-81b1-4b2b-9f97-992257225587/s1200?webp=false',
-                                         'https://66.media.tumblr.com/c689a85545b3badf16864c65e2d57bfb/tumblr_nyshzpYIxg1sn75h6o1_1280.jpg',
-                                         'https://funik.ru/wp-content/uploads/2018/12/57ca9b5a1b3be3e53c49.jpg',
-                                         'https://avatars.mds.yandex.net/get-pdb/202366/98ffeacb-3f2d-4e45-84c4-6eee6702e92d/s1200?webp=false']
-                                r=random.randint(0,11)
-                                upload = VkUpload(vk_session)
-                                image_url = str(urllist[r])
-                                image = session.get(image_url, stream=True)
-                                photo = upload.photo_messages(photos=image.raw)[0]
-                                attachments.append(
-                                    'photo{}_{}'.format(photo['owner_id'], photo['id']))
-                                vk.messages.send(
-                                    user_id=event.user_id,
-                                    random_id=0,
-                                    attachment=','.join(attachments),
-                                    message='А вот ваш котик:')
-                            elif requests1 == '6':  #
-                                write_msg(event.user_id, 'Пока')
-                                break
+def delete_msg(id_list, char):
+    id_list = id_list[1:]
+    vk.messages.delete(
+        message_ids=id_list,
+        spam='0',
+        delete_for_all=char)
+
+
+if __name__ == "__main__":
+    id_list = []
+    morph = pymorphy2.MorphAnalyzer()
+    login = Login('***********',
+                  '***********',
+                  '***********',
+                  '***********')
+    longpoll, vk, upload, token, vk_session = login.basic()
+    osnova = Main(longpoll, vk, upload, token, vk_session, id_list)
+    all_posts = osnova.basic()
